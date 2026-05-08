@@ -47,7 +47,7 @@ GOOGLE_SERVICE_ACCOUNT_PATH: str = "~/.resilient-finch/service_account.json"
 
 # Load user-level overrides from ~/.resilient-finch/config.json.
 # Supported keys: outputs, google_docs_doc_id, google_service_account_path,
-#                 blackhole_device_name
+#                 blackhole_device_name, whisper_model, whisper_language
 _user_config_path = _pathlib.Path("~/.resilient-finch/config.json").expanduser()
 if _user_config_path.exists():
     try:
@@ -64,5 +64,9 @@ if _user_config_path.exists():
             GOOGLE_SERVICE_ACCOUNT_PATH = str(_user_config["google_service_account_path"])
         if "blackhole_device_name" in _user_config:
             BLACKHOLE_DEVICE_NAME = str(_user_config["blackhole_device_name"])
+        if "whisper_model" in _user_config:
+            WHISPER_MODEL = str(_user_config["whisper_model"])
+        if "whisper_language" in _user_config:
+            WHISPER_LANGUAGE = str(_user_config["whisper_language"])
     except (_json.JSONDecodeError, OSError):
         pass
