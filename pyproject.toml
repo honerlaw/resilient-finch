@@ -1,0 +1,48 @@
+[project]
+name = "resilient-finch"
+version = "0.1.0"
+description = "Real-time dual-stream audio transcription for macOS"
+requires-python = ">=3.13"
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "sounddevice>=0.5.5",
+    "numpy>=2.4.4",
+    "mcp>=1.0.0",
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+]
+
+[project.scripts]
+resilient-finch = "resilient_finch.app:run"
+resilient-finch-mcp = "resilient_finch.mcp_server:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "ty>=0.0.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D",      # docstrings — no-comments policy
+    "CPY",    # copyright headers — personal utility
+    "COM812", # conflicts with ruff formatter
+    "ISC001", # conflicts with ruff formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["resilient_finch"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ty]
+
+[tool.ty.environment]
+python-version = "3.13"

@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+.uv/
+
+# Type checker caches
+.mypy_cache/
+.ty/
+.ruff_cache/
+pyrightconfig.json
+
+# Whisper model cache (large, downloaded on demand)
+# ~/.cache/huggingface is outside this repo — nothing to ignore here
+
+# Session transcripts (user data, not source)
+sessions/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Env files
+.env
+.env.*
+
+# Credentials (should live in ~/.resilient-finch/, not the repo)
+service_account*.json
+*_credentials.json
