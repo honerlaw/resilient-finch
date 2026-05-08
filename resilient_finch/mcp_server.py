@@ -10,6 +10,7 @@ from faster_whisper import WhisperModel
 from mcp.server.fastmcp import FastMCP
 
 from . import config
+from .aec import AcousticEchoCanceller
 from .capture import AudioCapturer, AudioChunk
 from .outputs import OutputWriter, TextFileWriter
 from .session import Session
@@ -36,6 +37,7 @@ def _build_writers(topic: str) -> list[OutputWriter]:
 class _ActiveSession:
     session: Session
     capturer: AudioCapturer
+    aec: AcousticEchoCanceller | None
     mic_transcriber: Transcriber
     speaker_transcriber: Transcriber
 
@@ -75,9 +77,21 @@ def start_session(topic: str = "") -> str:
             return "A session is already running. Call stop_session first."
 
         session = Session(topic=topic, writers=_build_writers(topic))
-        mic_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
-        spk_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
-        capturer = AudioCapturer(mic_queue, spk_queue)
+        raw_mic: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+        raw_spk: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+
+        if config.AEC_ENABLED:
+            proc_mic: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+            proc_spk: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+            aec: AcousticEchoCanceller | None = AcousticEchoCanceller(
+                raw_mic, raw_spk, proc_mic, proc_spk
+            )
+            mic_queue, spk_queue = proc_mic, proc_spk
+        else:
+            aec = None
+            mic_queue, spk_queue = raw_mic, raw_spk
+
+        capturer = AudioCapturer(raw_mic, raw_spk)
         mic_t = Transcriber("MIC", mic_queue, session, model)
         spk_t = Transcriber("SPEAKER", spk_queue, session, model)
 
@@ -87,12 +101,15 @@ def start_session(topic: str = "") -> str:
             session.close()
             return f"Failed to start audio capture: {e}"
 
+        if aec is not None:
+            aec.start()
         mic_t.start()
         spk_t.start()
 
         _state.active = _ActiveSession(
             session=session,
             capturer=capturer,
+            aec=aec,
             mic_transcriber=mic_t,
             speaker_transcriber=spk_t,
         )
@@ -116,6 +133,8 @@ def stop_session() -> str:
         _state.active = None
 
     active.capturer.stop()
+    if active.aec is not None:
+        active.aec.flush_and_stop(timeout=10.0)
     active.mic_transcriber.flush_and_stop(timeout=60.0)
     active.speaker_transcriber.flush_and_stop(timeout=60.0)
     active.session.close()

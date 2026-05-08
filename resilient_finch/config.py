@@ -32,6 +32,12 @@ WHISPER_CONDITION_ON_PREVIOUS_TEXT: bool = True
 WHISPER_WORD_TIMESTAMPS: bool = False
 TRANSCRIPTION_QUEUE_MAXSIZE: int = 2
 
+# Acoustic Echo Cancellation
+AEC_ENABLED: bool = True
+AEC_FRAME_SAMPLES: int = 160  # 10 ms at 16 kHz
+AEC_NUM_TAPS: int = 800  # 50 ms filter — covers typical desktop echo tail
+AEC_STEP_SIZE: float = 0.05
+
 # Session output
 SESSIONS_DIR: str = "sessions"
 SESSION_FILENAME_FORMAT: str = "session_%Y%m%d_%H%M%S.txt"

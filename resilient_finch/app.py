@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from faster_whisper import WhisperModel
 
 from . import config
+from .aec import AcousticEchoCanceller
 from .capture import AudioCapturer, AudioChunk
 from .outputs import OutputWriter, TextFileWriter
 from .session import Session
@@ -81,10 +82,21 @@ def run() -> None:
     )
     sys.stdout.write("Model loaded.\n")
 
-    mic_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
-    speaker_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+    raw_mic: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+    raw_spk: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
 
-    capturer = AudioCapturer(mic_queue, speaker_queue)
+    if config.AEC_ENABLED:
+        proc_mic: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+        proc_spk: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
+        aec: AcousticEchoCanceller | None = AcousticEchoCanceller(
+            raw_mic, raw_spk, proc_mic, proc_spk
+        )
+        mic_queue, speaker_queue = proc_mic, proc_spk
+    else:
+        aec = None
+        mic_queue, speaker_queue = raw_mic, raw_spk
+
+    capturer = AudioCapturer(raw_mic, raw_spk)
     mic_t = Transcriber("MIC", mic_queue, session, model)
     spk_t = Transcriber("SPEAKER", speaker_queue, session, model)
 
@@ -98,6 +110,8 @@ def run() -> None:
         session.close()
         return
 
+    if aec is not None:
+        aec.start()
     mic_t.start()
     spk_t.start()
 
@@ -105,6 +119,8 @@ def run() -> None:
     _shutdown_event.wait()
 
     capturer.stop()
+    if aec is not None:
+        aec.flush_and_stop(timeout=10.0)
     mic_t.flush_and_stop(timeout=60.0)
     spk_t.flush_and_stop(timeout=60.0)
     session.close()
