@@ -39,8 +39,6 @@ class _PropAddr(ctypes.Structure):
     ]
 
 
-_kCFBooleanTrue = ctypes.c_void_p.in_dll(_CF, "kCFBooleanTrue")
-_kCFBooleanFalse = ctypes.c_void_p.in_dll(_CF, "kCFBooleanFalse")
 _kCFTypeDictKeyCB = (ctypes.c_byte * 1).in_dll(_CF, "kCFTypeDictionaryKeyCallBacks")
 _kCFTypeDictValCB = (ctypes.c_byte * 1).in_dll(_CF, "kCFTypeDictionaryValueCallBacks")
 _kCFTypeArrCB = (ctypes.c_byte * 1).in_dll(_CF, "kCFTypeArrayCallBacks")
@@ -137,12 +135,6 @@ def _dict_set_str(d: int, key: str, val: str) -> None:
     _CF.CFRelease(v)
 
 
-def _dict_set_bool(d: int, key: str, val: bool) -> None:
-    k = _cf_str(key)
-    _CF.CFDictionarySetValue(d, k, _kCFBooleanTrue if val else _kCFBooleanFalse)
-    _CF.CFRelease(k)
-
-
 def _dict_set_ref(d: int, key: str, val: int) -> None:
     k = _cf_str(key)
     _CF.CFDictionarySetValue(d, k, val)
@@ -168,6 +160,21 @@ def _read_cfstr_prop(obj_id: int, selector: int) -> str:
     return result
 
 
+# ── ObjC runtime (needed to construct CATapDescription) ───────────────────────
+
+_objc = ctypes.CDLL("/usr/lib/libobjc.dylib")
+_objc.objc_getClass.restype = ctypes.c_void_p
+_objc.objc_getClass.argtypes = [ctypes.c_char_p]
+_objc.sel_registerName.restype = ctypes.c_void_p
+_objc.sel_registerName.argtypes = [ctypes.c_char_p]
+
+
+def _msg(obj: int, sel: str, *args: int) -> int:
+    _objc.objc_msgSend.restype = ctypes.c_void_p
+    _objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p] + [ctypes.c_void_p] * len(args)
+    return _objc.objc_msgSend(obj, _objc.sel_registerName(sel.encode()), *args)
+
+
 # ── Process tap ────────────────────────────────────────────────────────────────
 
 _TAP_AGGREGATE_NAME = "Resilient Finch System Audio"
@@ -176,20 +183,20 @@ _DEVICE_RETRY_DELAY_S = 0.2
 
 
 def _create_process_tap() -> tuple[int, str]:
-    tap_uuid = str(_uuid_mod.uuid4()).upper()
-
-    desc = _cf_dict_new()
-    # Keys from CATapDescription / AudioHardware.h (macOS 14.2+)
-    _dict_set_str(desc, "uuid", tap_uuid)
-    _dict_set_str(desc, "name", _TAP_AGGREGATE_NAME)
-    _dict_set_bool(desc, "mixd", True)  # stereo mixdown of all output processes
-    prcs = _cf_array_new()
-    _dict_set_ref(desc, "prcs", prcs)  # empty array = tap all processes
-    _CF.CFRelease(prcs)
+    # Build a CATapDescription via ObjC runtime:
+    # [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:[NSArray array]]
+    # Empty exclude list = tap all processes' output, mixed to stereo.
+    ns_array_cls = _objc.objc_getClass(b"NSArray")
+    empty_arr = _msg(ns_array_cls, "array")
+    tap_desc_cls = _objc.objc_getClass(b"CATapDescription")
+    tap_desc = _msg(
+        _msg(tap_desc_cls, "alloc"), "initStereoGlobalTapButExcludeProcesses:", empty_arr
+    )
+    if not tap_desc:
+        raise RuntimeError("CATapDescription init returned nil")
 
     tap_id = _AudioObjID(0)
-    status = _CA.AudioHardwareCreateProcessTap(desc, ctypes.byref(tap_id))
-    _CF.CFRelease(desc)
+    status = _CA.AudioHardwareCreateProcessTap(tap_desc, ctypes.byref(tap_id))
 
     if status != 0:
         msg = (
@@ -198,7 +205,10 @@ def _create_process_tap() -> tuple[int, str]:
         )
         raise RuntimeError(msg)
 
-    tap_uid = _read_cfstr_prop(tap_id.value, _kAudioTapPropertyUID) or tap_uuid
+    tap_uid = _read_cfstr_prop(tap_id.value, _kAudioTapPropertyUID)
+    if not tap_uid:
+        raise RuntimeError("Failed to read tap UID after creation")
+
     logger.debug("Process tap created: id=%d uid=%r", tap_id.value, tap_uid)
     return tap_id.value, tap_uid
 
