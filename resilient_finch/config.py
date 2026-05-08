@@ -57,5 +57,7 @@ if _user_config_path.exists():
             GOOGLE_DOCS_DOC_ID = _user_config["google_docs_doc_id"]  # type: ignore[assignment]
         if "google_service_account_path" in _user_config:
             GOOGLE_SERVICE_ACCOUNT_PATH = str(_user_config["google_service_account_path"])
+        if "blackhole_device_name" in _user_config:
+            BLACKHOLE_DEVICE_NAME = str(_user_config["blackhole_device_name"])
     except (_json.JSONDecodeError, OSError):
         pass

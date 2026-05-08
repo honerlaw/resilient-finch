@@ -16,31 +16,28 @@ If BlackHole doesn't appear in Audio MIDI Setup after installing, restart Core A
 sudo killall coreaudiod
 ```
 
-Then reopen Audio MIDI Setup.
-
-### 2. Configure Audio MIDI Setup
-
-Open `/Applications/Utilities/Audio MIDI Setup.app`:
-
-**Create a Multi-Output Device (system audio keeps playing through speakers):**
-1. Click `+` → "Create Multi-Output Device"
-2. Check both **MacBook Pro Speakers** and **BlackHole 2ch**
-3. Name it "Multi-Output"
-
-**Create an Aggregate Device (what the tool reads system audio from):**
-1. Click `+` → "Create Aggregate Device"
-2. Check **BlackHole 2ch**
-3. Set the sample rate to **16000 Hz**
-4. Name it (the tool searches for "BlackHole 2ch" by substring)
-
-**Set system output:**
-- System Settings → Sound → Output → select "Multi-Output"
-
-### 3. Install dependencies
+### 2. Install dependencies
 
 ```bash
 uv sync
 ```
+
+### 3. Run audio setup
+
+```bash
+uv run python setup.py
+```
+
+This creates two audio devices and sets your system output:
+
+| Device | Purpose |
+|---|---|
+| **Resilient Finch Output** | Multi-Output Device — routes audio to your speakers *and* BlackHole simultaneously. Set as system default output. |
+| **Resilient Finch Capture** | Aggregate Device — wraps BlackHole at 16 kHz. What the tool reads from. |
+
+Safe to run more than once — skips devices that already exist.
+
+To revert: **System Settings → Sound → Output** → select your speakers, then delete the created devices in **Audio MIDI Setup**.
 
 > The Whisper large-v3 model (~3GB) downloads automatically on first run to `~/.cache/huggingface/hub`.
 
