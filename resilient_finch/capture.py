@@ -61,6 +61,17 @@ class _AudioBuffer(ctypes.Structure):
     ]
 
 
+class _AudioBufferList(ctypes.Structure):
+    _fields_ = [
+        ("mNumberBuffers", ctypes.c_uint32),
+        ("mBuffers", _AudioBuffer * 1),
+    ]
+
+
+# mBuffers is 8 bytes into AudioBufferList due to alignment padding after mNumberBuffers
+_AUDIO_BUFFERS_OFFSET: int = _AudioBufferList.mBuffers.offset
+
+
 # IOProc callback type: (device, now, inputData, inputTime, outputData, outputTime, clientData) -> OSStatus
 _IOProcFuncType = ctypes.CFUNCTYPE(
     _OSStatus,
@@ -348,8 +359,7 @@ def _make_tap_ioproc(
             n_buffers = ctypes.c_uint32.from_address(in_data_ptr).value
             if n_buffers == 0:
                 return 0
-            buffers_ptr = in_data_ptr + ctypes.sizeof(ctypes.c_uint32)
-            buffers = (_AudioBuffer * n_buffers).from_address(buffers_ptr)
+            buffers = (_AudioBuffer * n_buffers).from_address(in_data_ptr + _AUDIO_BUFFERS_OFFSET)
 
             channels: list[NDArray[np.float32]] = []
             for i in range(n_buffers):
