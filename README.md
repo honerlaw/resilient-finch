@@ -22,7 +22,15 @@ sudo killall coreaudiod
 uv sync
 ```
 
-### 3. Run audio setup
+### 3. Configure
+
+```bash
+uv run resilient-finch-configure
+```
+
+Prompts for output format (text file and/or Google Docs), Whisper model size, and transcription language. Settings are saved to `~/.resilient-finch/config.json`. Re-running shows current values as defaults — safe to run any time.
+
+### 4. Run audio setup
 
 ```bash
 uv run python setup.py
@@ -133,14 +141,8 @@ Restart Claude Desktop. You can then ask Claude to start a transcription session
 ## Development
 
 ```bash
-# Lint
-uv run ruff check .
-
-# Format
-uv run ruff format .
-
-# Type check
-uv run ty check
+make check   # lint + type check
+make fmt     # auto-format
 ```
 
 ## Verify audio devices
@@ -151,6 +153,3 @@ uv run python -c "import sounddevice as sd; print(sd.query_devices())"
 
 BlackHole 2ch should appear as an input device.
 
-## Future: MCP Server
-
-The core classes (`Session`, `AudioCapturer`, `Transcriber`) are designed for MCP wrapping. A future `resilient_finch/mcp_server.py` will expose `start_session`, `stop_session`, `get_transcript`, and `list_sessions` tools with no changes to the library code.
