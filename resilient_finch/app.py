@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import queue
 import signal
 import sys
@@ -25,7 +26,11 @@ _shutdown_event = threading.Event()
 
 
 def _shutdown_handler(_signum: int, _frame: types.FrameType | None) -> None:
-    sys.stdout.write("\nShutting down... flushing remaining audio (this may take up to 60s)\n")
+    if _shutdown_event.is_set():
+        sys.stdout.write("\nForce quit.\n")
+        os._exit(0)
+    sys.stdout.write("\nShutting down... finishing current transcription then saving.\n")
+    sys.stdout.write("Press Ctrl+C again to force quit immediately.\n")
     _shutdown_event.set()
 
 

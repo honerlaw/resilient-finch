@@ -64,6 +64,13 @@ class Transcriber:
 
     def flush_and_stop(self, timeout: float = 60.0) -> None:
         self._stop_event.set()
+        # Drop any pre-existing backlog so shutdown only waits for the
+        # in-progress transcription and one final segment from the buffer flush.
+        while True:
+            try:
+                self._transcription_queue.get_nowait()
+            except queue.Empty:
+                break
         if self._buffer_thread:
             self._buffer_thread.join(timeout=timeout)
         if self._transcription_thread:
@@ -131,7 +138,7 @@ class Transcriber:
         self._buffer_samples = 0
         self._buffer_start_time = None
         try:
-            self._transcription_queue.put((audio, seg_time), timeout=5.0)
+            self._transcription_queue.put_nowait((audio, seg_time))
         except queue.Full:
             logger.warning("[%s] transcription queue full — dropping segment", self._source)
 
