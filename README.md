@@ -89,6 +89,19 @@ All tunable settings are in `resilient_finch/config.py`:
 | `SEGMENT_SECONDS` | `20.0` | Seconds to accumulate before sending to Whisper |
 | `BLACKHOLE_DEVICE_NAME` | `BlackHole 2ch` | Partial match — adjust if your device name differs |
 | `WHISPER_LANGUAGE` | `en` | Set to `None` for auto-detect |
+| `AEC_ENABLED` | `true` | Acoustic echo cancellation — removes speaker audio re-captured by the mic |
+| `AEC_NUM_TAPS` | `800` | Filter length in samples (50ms at 16kHz) — increase for more reverberant rooms |
+| `AEC_STEP_SIZE` | `0.05` | Adaptation rate — lower if mic sounds muffled, raise if echo persists |
+
+User-level overrides go in `~/.resilient-finch/config.json`. To disable AEC:
+
+```json
+{
+  "aec_enabled": false
+}
+```
+
+> AEC takes a few seconds to converge at the start of each session. Some bleed-through during the first few seconds is expected.
 
 ## MCP Server
 

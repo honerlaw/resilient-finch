@@ -52,7 +52,8 @@ GOOGLE_DOCS_DOC_ID: str | None = None
 GOOGLE_SERVICE_ACCOUNT_PATH: str = "~/.resilient-finch/service_account.json"
 
 # Load user-level overrides from ~/.resilient-finch/config.json.
-# Supported keys: outputs, google_docs_doc_id, google_service_account_path
+# Supported keys: outputs, google_docs_doc_id, google_service_account_path,
+#                 blackhole_device_name, aec_enabled, aec_num_taps, aec_step_size
 _user_config_path = _pathlib.Path("~/.resilient-finch/config.json").expanduser()
 if _user_config_path.exists():
     try:
@@ -69,5 +70,15 @@ if _user_config_path.exists():
             GOOGLE_SERVICE_ACCOUNT_PATH = str(_user_config["google_service_account_path"])
         if "blackhole_device_name" in _user_config:
             BLACKHOLE_DEVICE_NAME = str(_user_config["blackhole_device_name"])
+        if "aec_enabled" in _user_config:
+            AEC_ENABLED = bool(_user_config["aec_enabled"])
+        if "aec_num_taps" in _user_config:
+            _taps = _user_config["aec_num_taps"]
+            if isinstance(_taps, int):
+                AEC_NUM_TAPS = _taps
+        if "aec_step_size" in _user_config:
+            _step = _user_config["aec_step_size"]
+            if isinstance(_step, float | int):
+                AEC_STEP_SIZE = float(_step)
     except (_json.JSONDecodeError, OSError):
         pass
