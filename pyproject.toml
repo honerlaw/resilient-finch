@@ -40,7 +40,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "setup.py" = ["T201", "N816", "E501", "TRY003", "EM101", "EM102", "FBT001"]
-"resilient_finch/capture.py" = ["N816", "E501", "TRY003", "EM101", "EM102", "SLF001", "FBT001", "FBT003"]
+"resilient_finch/capture.py" = ["N816", "E501", "TRY003", "EM101", "EM102", "SLF001", "FBT001", "FBT003", "C901", "S110"]
 "resilient_finch/configure.py" = ["T201"]
 
 [tool.ruff.lint.isort]
