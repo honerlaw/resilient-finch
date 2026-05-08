@@ -10,6 +10,14 @@ Captures microphone input and system audio output simultaneously, transcribes bo
 brew install blackhole-2ch
 ```
 
+If BlackHole doesn't appear in Audio MIDI Setup after installing, restart Core Audio:
+
+```bash
+sudo killall coreaudiod
+```
+
+Then reopen Audio MIDI Setup.
+
 ### 2. Configure Audio MIDI Setup
 
 Open `/Applications/Utilities/Audio MIDI Setup.app`:
