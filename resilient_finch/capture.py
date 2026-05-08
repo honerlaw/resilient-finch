@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import queue
+import uuid as _uuid_mod
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -78,12 +79,31 @@ _objc.objc_getClass.argtypes = [ctypes.c_char_p]
 _objc.sel_registerName.restype = ctypes.c_void_p
 _objc.sel_registerName.argtypes = [ctypes.c_char_p]
 
-# CF (only needed for reading string properties)
+# CF
 _kCFStringEncodingUTF8: int = 0x08000100
+_kCFTypeDictKeyCB = (ctypes.c_byte * 1).in_dll(_CF, "kCFTypeDictionaryKeyCallBacks")
+_kCFTypeDictValCB = (ctypes.c_byte * 1).in_dll(_CF, "kCFTypeDictionaryValueCallBacks")
+_kCFTypeArrCB = (ctypes.c_byte * 1).in_dll(_CF, "kCFTypeArrayCallBacks")
+
+_CF.CFStringCreateWithCString.restype = _CFTypeRef
+_CF.CFStringCreateWithCString.argtypes = [_CFTypeRef, ctypes.c_char_p, ctypes.c_uint32]
 _CF.CFStringGetLength.restype = ctypes.c_long
 _CF.CFStringGetLength.argtypes = [_CFTypeRef]
 _CF.CFStringGetCString.restype = ctypes.c_bool
 _CF.CFStringGetCString.argtypes = [_CFTypeRef, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32]
+_CF.CFDictionaryCreateMutable.restype = _CFTypeRef
+_CF.CFDictionaryCreateMutable.argtypes = [
+    _CFTypeRef,
+    ctypes.c_long,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+]
+_CF.CFDictionarySetValue.restype = None
+_CF.CFDictionarySetValue.argtypes = [_CFTypeRef, _CFTypeRef, _CFTypeRef]
+_CF.CFArrayCreateMutable.restype = _CFTypeRef
+_CF.CFArrayCreateMutable.argtypes = [_CFTypeRef, ctypes.c_long, ctypes.c_void_p]
+_CF.CFArrayAppendValue.restype = None
+_CF.CFArrayAppendValue.argtypes = [_CFTypeRef, _CFTypeRef]
 _CF.CFRelease.restype = None
 _CF.CFRelease.argtypes = [_CFTypeRef]
 
@@ -106,6 +126,10 @@ _CA.AudioHardwareCreateProcessTap.restype = _OSStatus
 _CA.AudioHardwareCreateProcessTap.argtypes = [_CFTypeRef, ctypes.POINTER(_AudioObjID)]
 _CA.AudioHardwareDestroyProcessTap.restype = _OSStatus
 _CA.AudioHardwareDestroyProcessTap.argtypes = [_AudioObjID]
+_CA.AudioHardwareCreateAggregateDevice.restype = _OSStatus
+_CA.AudioHardwareCreateAggregateDevice.argtypes = [_CFTypeRef, ctypes.POINTER(_AudioObjID)]
+_CA.AudioHardwareDestroyAggregateDevice.restype = _OSStatus
+_CA.AudioHardwareDestroyAggregateDevice.argtypes = [_AudioObjID]
 _CA.AudioDeviceCreateIOProcID.restype = _OSStatus
 _CA.AudioDeviceCreateIOProcID.argtypes = [
     _AudioObjID,
@@ -145,6 +169,76 @@ def _read_cfstr_prop(obj_id: int, selector: int) -> str:
     return buf.value.decode("utf-8")
 
 
+def _cf_str(s: str) -> int:
+    ref = _CF.CFStringCreateWithCString(None, s.encode("utf-8"), _kCFStringEncodingUTF8)
+    if not ref:
+        raise RuntimeError(f"CFStringCreateWithCString failed for {s!r}")
+    return ref
+
+
+def _cf_dict_new() -> int:
+    return _CF.CFDictionaryCreateMutable(
+        None,
+        0,
+        ctypes.addressof(_kCFTypeDictKeyCB),
+        ctypes.addressof(_kCFTypeDictValCB),
+    )
+
+
+def _cf_array_new() -> int:
+    return _CF.CFArrayCreateMutable(None, 0, ctypes.addressof(_kCFTypeArrCB))
+
+
+def _dict_set_str(d: int, key: str, val: str) -> None:
+    k = _cf_str(key)
+    v = _cf_str(val)
+    _CF.CFDictionarySetValue(d, k, v)
+    _CF.CFRelease(k)
+    _CF.CFRelease(v)
+
+
+def _dict_set_ref(d: int, key: str, val: int) -> None:
+    k = _cf_str(key)
+    _CF.CFDictionarySetValue(d, k, val)
+    _CF.CFRelease(k)
+
+
+def _create_tap_aggregate(tap_uid: str) -> int:
+    tap_entry = _cf_dict_new()
+    _dict_set_str(tap_entry, "uid", tap_uid)
+
+    taps_arr = _cf_array_new()
+    _CF.CFArrayAppendValue(taps_arr, tap_entry)
+    _CF.CFRelease(tap_entry)
+
+    subdevices_arr = _cf_array_new()
+
+    agg_uid = f"com.resilient-finch.tap-agg-{_uuid_mod.uuid4()}"
+    desc = _cf_dict_new()
+    _dict_set_str(desc, "uid", agg_uid)
+    _dict_set_str(desc, "name", "Resilient Finch System Audio")
+    _dict_set_ref(desc, "subdevices", subdevices_arr)
+    _dict_set_ref(desc, "taps", taps_arr)
+    _CF.CFRelease(subdevices_arr)
+    _CF.CFRelease(taps_arr)
+
+    agg_id = _AudioObjID(0)
+    status = _CA.AudioHardwareCreateAggregateDevice(desc, ctypes.byref(agg_id))
+    _CF.CFRelease(desc)
+
+    if status != 0:
+        raise RuntimeError(f"AudioHardwareCreateAggregateDevice failed: OSStatus {status:#010x}")
+
+    logger.debug("Tap aggregate device created: id=%d", agg_id.value)
+    return agg_id.value
+
+
+def _destroy_tap_aggregate(agg_id: int) -> None:
+    status = _CA.AudioHardwareDestroyAggregateDevice(agg_id)
+    if status != 0:
+        logger.warning("AudioHardwareDestroyAggregateDevice failed: OSStatus %#010x", status)
+
+
 def _get_tap_format(tap_id: int) -> _AudioStreamBasicDescription:
     addr = _PropAddr(
         _kAudioTapPropertyFormat, _kAudioObjectPropertyScopeGlobal, _kAudioObjectPropertyElementMain
@@ -173,7 +267,7 @@ def _msg(obj: int, sel: str, *args: int) -> int:
 # ── Process tap ────────────────────────────────────────────────────────────────
 
 
-def _create_process_tap() -> tuple[int, _AudioStreamBasicDescription]:
+def _create_process_tap() -> tuple[int, str, _AudioStreamBasicDescription]:
     ns_array_cls = _objc.objc_getClass(b"NSArray")
     empty_arr = _msg(ns_array_cls, "array")
     tap_desc_cls = _objc.objc_getClass(b"CATapDescription")
@@ -194,8 +288,10 @@ def _create_process_tap() -> tuple[int, _AudioStreamBasicDescription]:
         )
         raise RuntimeError(msg)
 
-    fmt = _get_tap_format(tap_id.value)
     tap_uid = _read_cfstr_prop(tap_id.value, _kAudioTapPropertyUID)
+    if not tap_uid:
+        raise RuntimeError("Failed to read tap UID after creation")
+    fmt = _get_tap_format(tap_id.value)
     logger.debug(
         "Process tap created: id=%d uid=%r %.0f Hz %d ch",
         tap_id.value,
@@ -203,7 +299,7 @@ def _create_process_tap() -> tuple[int, _AudioStreamBasicDescription]:
         fmt.mSampleRate,
         fmt.mChannelsPerFrame,
     )
-    return tap_id.value, fmt
+    return tap_id.value, tap_uid, fmt
 
 
 def _destroy_process_tap(tap_id: int) -> None:
@@ -303,17 +399,23 @@ class AudioCapturer:
         self._speaker_queue = speaker_queue
         self._mic_stream: sd.InputStream | None = None
         self._tap_id: int | None = None
+        self._tap_agg_id: int | None = None
         self._tap_proc_id: int | None = None
         self._tap_ioproc_fn: object = None  # must stay alive (ctypes GC guard)
 
     def start(self) -> None:
-        tap_id, tap_fmt = _create_process_tap()
+        tap_id, tap_uid, tap_fmt = _create_process_tap()
         self._tap_id = tap_id
+
+        # Wrap the tap in an aggregate device — the aggregate is a proper AudioDevice
+        # that supports IOProc, whereas the tap AudioObject does not.
+        agg_id = _create_tap_aggregate(tap_uid)
+        self._tap_agg_id = agg_id
 
         self._tap_ioproc_fn = _make_tap_ioproc(self._speaker_queue, tap_fmt.mSampleRate)
         proc_id = ctypes.c_void_p(0)
         status = _CA.AudioDeviceCreateIOProcID(
-            tap_id,
+            agg_id,
             self._tap_ioproc_fn,
             None,
             ctypes.byref(proc_id),
@@ -322,9 +424,9 @@ class AudioCapturer:
             raise RuntimeError(f"AudioDeviceCreateIOProcID failed: OSStatus {status:#010x}")
         self._tap_proc_id = proc_id.value
 
-        status = _CA.AudioDeviceStart(tap_id, self._tap_proc_id)
+        status = _CA.AudioDeviceStart(agg_id, self._tap_proc_id)
         if status != 0:
-            raise RuntimeError(f"AudioDeviceStart (tap) failed: OSStatus {status:#010x}")
+            raise RuntimeError(f"AudioDeviceStart (tap aggregate) failed: OSStatus {status:#010x}")
 
         mic_idx = (
             self._find_device_index(config.MIC_DEVICE_NAME) if config.MIC_DEVICE_NAME else None
@@ -339,9 +441,9 @@ class AudioCapturer:
         )
         self._mic_stream.start()
         logger.info(
-            "Audio capture started (mic=%s, tap id=%d %.0f Hz)",
+            "Audio capture started (mic=%s, tap agg id=%d %.0f Hz)",
             mic_idx,
-            tap_id,
+            agg_id,
             tap_fmt.mSampleRate,
         )
 
@@ -354,10 +456,14 @@ class AudioCapturer:
                 logger.debug("Mic stream cleanup error", exc_info=True)
             self._mic_stream = None
 
-        if self._tap_id is not None and self._tap_proc_id is not None:
-            _CA.AudioDeviceStop(self._tap_id, self._tap_proc_id)
-            _CA.AudioDeviceDestroyIOProcID(self._tap_id, self._tap_proc_id)
+        if self._tap_agg_id is not None and self._tap_proc_id is not None:
+            _CA.AudioDeviceStop(self._tap_agg_id, self._tap_proc_id)
+            _CA.AudioDeviceDestroyIOProcID(self._tap_agg_id, self._tap_proc_id)
             self._tap_proc_id = None
+
+        if self._tap_agg_id is not None:
+            _destroy_tap_aggregate(self._tap_agg_id)
+            self._tap_agg_id = None
 
         if self._tap_id is not None:
             _destroy_process_tap(self._tap_id)
