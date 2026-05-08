@@ -3,18 +3,18 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from .. import config
+from .base import OutputWriter
 
 if TYPE_CHECKING:
-    from ..session import TranscriptEntry
+    from datetime import datetime
 
-from .base import OutputWriter
+    from ..session import TranscriptEntry
 
 logger = logging.getLogger(__name__)
 
@@ -135,10 +135,14 @@ class GoogleDocsWriter(OutputWriter):
         return doc_id
 
     def _create_tab(self, doc_id: str, title: str) -> str:
-        result = self._docs.documents().batchUpdate(
-            documentId=doc_id,
-            body={"requests": [{"createTab": {"tabProperties": {"title": title}}}]},
-        ).execute()
+        result = (
+            self._docs.documents()
+            .batchUpdate(
+                documentId=doc_id,
+                body={"requests": [{"createTab": {"tabProperties": {"title": title}}}]},
+            )
+            .execute()
+        )
         tab_props: dict[str, Any] = result["replies"][0]["createTab"]["tab"]["tabProperties"]
         return tab_props["tabId"]
 

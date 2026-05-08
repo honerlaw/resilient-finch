@@ -36,6 +36,7 @@ def _build_writers(topic: str) -> list[OutputWriter]:
             writers.append(TextFileWriter(topic=topic))
         elif name == "google_docs":
             from .outputs.google_docs import GoogleDocsWriter
+
             writers.append(GoogleDocsWriter())
         else:
             logger.warning("Unknown output type %r — skipping", name)

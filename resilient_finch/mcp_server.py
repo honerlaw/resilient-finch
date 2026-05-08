@@ -25,6 +25,7 @@ def _build_writers(topic: str) -> list[OutputWriter]:
             writers.append(TextFileWriter(topic=topic))
         elif name == "google_docs":
             from .outputs.google_docs import GoogleDocsWriter
+
             writers.append(GoogleDocsWriter())
         else:
             logger.warning("Unknown output type %r — skipping", name)
@@ -47,7 +48,7 @@ class _ServerState:
 
 
 _state = _ServerState()
-mcp = FastMCP("resilient-finch", description="Real-time audio transcription for macOS")
+mcp = FastMCP("resilient-finch", instructions="Real-time audio transcription for macOS")
 
 
 def _ensure_model() -> WhisperModel:
@@ -156,9 +157,7 @@ def list_sessions() -> str:
         return "No sessions found."
 
     with _state.lock:
-        active_path = (
-            _state.active.session.get_file_path() if _state.active is not None else None
-        )
+        active_path = _state.active.session.get_file_path() if _state.active is not None else None
 
     lines: list[str] = []
     for f in files:

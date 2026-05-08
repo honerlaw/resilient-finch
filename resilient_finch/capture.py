@@ -37,9 +37,7 @@ class AudioCapturer:
 
     def start(self) -> None:
         mic_idx = (
-            self._find_device_index(config.MIC_DEVICE_NAME)
-            if config.MIC_DEVICE_NAME
-            else None
+            self._find_device_index(config.MIC_DEVICE_NAME) if config.MIC_DEVICE_NAME else None
         )
         speaker_idx = self._find_device_index(config.BLACKHOLE_DEVICE_NAME)
 
@@ -61,9 +59,7 @@ class AudioCapturer:
         )
         self._mic_stream.start()
         self._speaker_stream.start()
-        logger.info(
-            "Audio capture started (mic device=%s, blackhole idx=%d)", mic_idx, speaker_idx
-        )
+        logger.info("Audio capture started (mic device=%s, blackhole idx=%d)", mic_idx, speaker_idx)
 
     def stop(self) -> None:
         for stream in (self._mic_stream, self._speaker_stream):
@@ -101,9 +97,7 @@ class AudioCapturer:
         ) -> None:
             if status:
                 logger.warning("[%s] sounddevice status: %s", source, status)
-            mono: NDArray[np.float32] = (
-                indata.mean(axis=1) if indata.shape[1] > 1 else indata[:, 0]
-            )
+            mono: NDArray[np.float32] = indata.mean(axis=1) if indata.shape[1] > 1 else indata[:, 0]
             chunk = AudioChunk(data=mono.copy(), timestamp=datetime.now(tz=UTC), source=source)
             try:
                 q.put_nowait(chunk)

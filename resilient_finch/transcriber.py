@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 type _TranscribeJob = tuple[NDArray[np.float32], datetime]
 
+_PROMPT_MAX_CHARS: int = 500
+
 
 class Transcriber:
     def __init__(
@@ -180,6 +182,6 @@ class Transcriber:
                 texts.append(text)
             if texts:
                 combined = " ".join(texts)
-                self._last_prompt = combined[-500:] if len(combined) > 500 else combined
+                self._last_prompt = combined[-_PROMPT_MAX_CHARS:]
         except (RuntimeError, ValueError, OSError):
             logger.exception("[%s] Transcription error", self._source)

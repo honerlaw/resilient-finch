@@ -52,9 +52,13 @@ if _user_config_path.exists():
     try:
         _user_config: dict[str, object] = _json.loads(_user_config_path.read_text())
         if "outputs" in _user_config:
-            OUTPUTS = list(_user_config["outputs"])  # type: ignore[arg-type]
+            _outputs = _user_config["outputs"]
+            if isinstance(_outputs, list):
+                OUTPUTS = [str(x) for x in _outputs]
         if "google_docs_doc_id" in _user_config:
-            GOOGLE_DOCS_DOC_ID = _user_config["google_docs_doc_id"]  # type: ignore[assignment]
+            _doc_id = _user_config["google_docs_doc_id"]
+            if isinstance(_doc_id, str):
+                GOOGLE_DOCS_DOC_ID = _doc_id
         if "google_service_account_path" in _user_config:
             GOOGLE_SERVICE_ACCOUNT_PATH = str(_user_config["google_service_account_path"])
         if "blackhole_device_name" in _user_config:

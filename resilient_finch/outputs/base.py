@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import pathlib
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import pathlib
+    from datetime import datetime
+
     from ..session import TranscriptEntry
 
 

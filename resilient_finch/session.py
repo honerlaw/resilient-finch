@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import pathlib
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from .outputs.base import OutputWriter
+if TYPE_CHECKING:
+    import pathlib
+
+    from .outputs.base import OutputWriter
 
 
 @dataclass(order=True)
