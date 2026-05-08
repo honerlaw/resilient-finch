@@ -104,8 +104,12 @@ _CF.CFArrayCreateMutable.restype = _CFTypeRef
 _CF.CFArrayCreateMutable.argtypes = [_CFTypeRef, ctypes.c_long, ctypes.c_void_p]
 _CF.CFArrayAppendValue.restype = None
 _CF.CFArrayAppendValue.argtypes = [_CFTypeRef, _CFTypeRef]
+_CF.CFNumberCreate.restype = _CFTypeRef
+_CF.CFNumberCreate.argtypes = [_CFTypeRef, ctypes.c_long, ctypes.c_void_p]
 _CF.CFRelease.restype = None
 _CF.CFRelease.argtypes = [_CFTypeRef]
+
+_kCFNumberSInt32Type = 3
 
 # CoreAudio
 _kAudioObjectPropertyScopeGlobal = _fcc("glob")
@@ -197,6 +201,15 @@ def _dict_set_str(d: int, key: str, val: str) -> None:
     _CF.CFRelease(v)
 
 
+def _dict_set_int(d: int, key: str, val: int) -> None:
+    k = _cf_str(key)
+    v_raw = ctypes.c_int32(val)
+    v = _CF.CFNumberCreate(None, _kCFNumberSInt32Type, ctypes.byref(v_raw))
+    _CF.CFDictionarySetValue(d, k, v)
+    _CF.CFRelease(k)
+    _CF.CFRelease(v)
+
+
 def _dict_set_ref(d: int, key: str, val: int) -> None:
     k = _cf_str(key)
     _CF.CFDictionarySetValue(d, k, val)
@@ -219,6 +232,8 @@ def _create_tap_aggregate(tap_uid: str) -> int:
     _dict_set_str(desc, "name", "Resilient Finch System Audio")
     _dict_set_ref(desc, "subdevices", subdevices_arr)
     _dict_set_ref(desc, "taps", taps_arr)
+    _dict_set_int(desc, "private", 1)  # required when using tapautostart
+    _dict_set_int(desc, "tapautostart", 1)  # wait for first tap audio before clocking
     _CF.CFRelease(subdevices_arr)
     _CF.CFRelease(taps_arr)
 
