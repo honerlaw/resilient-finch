@@ -44,6 +44,8 @@ class Transcriber:
         self._buffer_samples: int = 0
         self._buffer_start_time: datetime | None = None
 
+        self._last_prompt: str = ""
+
         self._buffer_thread: threading.Thread | None = None
         self._transcription_thread: threading.Thread | None = None
 
@@ -165,7 +167,9 @@ class Transcriber:
                 },
                 condition_on_previous_text=config.WHISPER_CONDITION_ON_PREVIOUS_TEXT,
                 word_timestamps=config.WHISPER_WORD_TIMESTAMPS,
+                initial_prompt=self._last_prompt or None,
             )
+            texts: list[str] = []
             for segment in segments:
                 text = segment.text.strip()
                 if not text:
@@ -173,5 +177,9 @@ class Transcriber:
                 abs_time = seg_time + timedelta(seconds=segment.start)
                 self._session.add_entry(abs_time, self._source, text)
                 logger.info("[%s] %s", self._source, text)
+                texts.append(text)
+            if texts:
+                combined = " ".join(texts)
+                self._last_prompt = combined[-500:] if len(combined) > 500 else combined
         except (RuntimeError, ValueError, OSError):
             logger.exception("[%s] Transcription error", self._source)
