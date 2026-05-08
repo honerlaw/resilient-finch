@@ -2,27 +2,19 @@
 
 Captures microphone input and system audio output simultaneously, transcribes both with Whisper large-v3, and writes a labeled session file.
 
+## Requirements
+
+- macOS 14.2 or later (uses the CoreAudio process tap API for system audio capture)
+
 ## Setup
 
-### 1. Install BlackHole
-
-```bash
-brew install blackhole-2ch
-```
-
-If BlackHole doesn't appear in Audio MIDI Setup after installing, restart Core Audio:
-
-```bash
-sudo killall coreaudiod
-```
-
-### 2. Install dependencies
+### 1. Install dependencies
 
 ```bash
 uv sync
 ```
 
-### 3. Configure
+### 2. Configure
 
 ```bash
 uv run resilient-finch-configure
@@ -30,24 +22,9 @@ uv run resilient-finch-configure
 
 Prompts for output format (text file and/or Google Docs), Whisper model size, and transcription language. Settings are saved to `~/.resilient-finch/config.json`. Re-running shows current values as defaults — safe to run any time.
 
-### 4. Run audio setup
-
-```bash
-uv run python setup.py
-```
-
-This creates two audio devices and sets your system output:
-
-| Device | Purpose |
-|---|---|
-| **Resilient Finch Output** | Multi-Output Device — routes audio to your speakers *and* BlackHole simultaneously. Set as system default output. |
-| **Resilient Finch Capture** | Aggregate Device — wraps BlackHole at 16 kHz. What the tool reads from. |
-
-Safe to run more than once — skips devices that already exist.
-
-To revert: **System Settings → Sound → Output** → select your speakers, then delete the created devices in **Audio MIDI Setup**.
-
 > The Whisper large-v3 model (~3GB) downloads automatically on first run to `~/.cache/huggingface/hub`.
+
+> **First run:** macOS will prompt for *Screen & System Audio Recording* permission. Grant it — this is what allows the process tap to capture system audio. Your system output device and volume controls are not affected.
 
 ## Usage
 
@@ -95,7 +72,6 @@ All tunable settings are in `resilient_finch/config.py`:
 |---|---|---|
 | `WHISPER_MODEL` | `large-v3` | Change to `medium` or `base` for faster inference |
 | `SEGMENT_SECONDS` | `20.0` | Seconds to accumulate before sending to Whisper |
-| `BLACKHOLE_DEVICE_NAME` | `BlackHole 2ch` | Partial match — adjust if your device name differs |
 | `WHISPER_LANGUAGE` | `en` | Set to `None` for auto-detect |
 
 ## MCP Server
@@ -145,11 +121,21 @@ make check   # lint + type check
 make fmt     # auto-format
 ```
 
-## Verify audio devices
+## Troubleshooting
+
+**System audio not being captured**
+
+macOS requires *Screen & System Audio Recording* permission for the process tap API. Go to **System Settings → Privacy & Security → Screen & System Audio Recording** and enable it for Terminal (or whichever app you run the tool from). Restart the app after granting permission.
+
+**"AudioHardwareCreateProcessTap failed" error**
+
+Same as above — this is the permission check failing at the API level.
+
+**Microphone not found**
+
+Set `MIC_DEVICE_NAME` in `config.py` to a substring of your mic's name as shown by:
 
 ```bash
 uv run python -c "import sounddevice as sd; print(sd.query_devices())"
 ```
-
-BlackHole 2ch should appear as an input device.
 

@@ -8,7 +8,6 @@ SAMPLE_RATE: int = 16_000
 CHANNELS: int = 1
 BLOCK_SIZE_FRAMES: int = 1_024
 MIC_DEVICE_NAME: str | None = None
-BLACKHOLE_DEVICE_NAME: str = "BlackHole 2ch"
 AUDIO_QUEUE_MAXSIZE: int = 500
 
 # Buffering / segmentation

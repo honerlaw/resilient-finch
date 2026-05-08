@@ -157,7 +157,7 @@ class Transcriber:
         )
 
         try:
-            segments, _ = self._model.transcribe(
+            segments, info = self._model.transcribe(
                 audio,
                 language=config.WHISPER_LANGUAGE,
                 beam_size=config.WHISPER_BEAM_SIZE,
@@ -171,6 +171,14 @@ class Transcriber:
                 word_timestamps=config.WHISPER_WORD_TIMESTAMPS,
                 initial_prompt=self._last_prompt or None,
             )
+            if config.WHISPER_VAD_FILTER:
+                logger.debug(
+                    "[%s] VAD filter: %.1fs in → %.1fs after (removed %.1fs)",
+                    self._source,
+                    info.duration,
+                    info.duration_after_vad,
+                    info.duration - info.duration_after_vad,
+                )
             texts: list[str] = []
             for segment in segments:
                 text = segment.text.strip()
