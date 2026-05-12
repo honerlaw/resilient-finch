@@ -4,6 +4,8 @@ import json
 import pathlib
 import sys
 
+from . import config
+
 _CONFIG_PATH = pathlib.Path("~/.resilient-finch/config.json").expanduser()
 
 _WHISPER_MODELS = {
@@ -118,6 +120,24 @@ def _configure_whisper(cfg: dict[str, object]) -> dict[str, object]:
     return cfg
 
 
+def _configure_audio_mode(cfg: dict[str, object]) -> dict[str, object]:
+    _section("Audio mode")
+
+    current_mode = str(cfg.get("audio_mode", config.AUDIO_MODE))
+    current_label = "2" if current_mode == "mic_and_speaker" else "1"
+
+    print("  1) mic_only        — mic only, higher gain (default, for room capture without headphones)")
+    print("  2) mic_and_speaker — mic + system audio (for use with headphones + mic)")
+
+    choice = _prompt("choice", current_label)
+    if choice == "2":
+        cfg["audio_mode"] = "mic_and_speaker"
+    else:
+        cfg["audio_mode"] = "mic_only"
+
+    return cfg
+
+
 def _configure_language(cfg: dict[str, object]) -> dict[str, object]:
     _section("Transcription language")
 
@@ -155,6 +175,7 @@ def main() -> None:
         cfg.pop("google_service_account_path", None)
         cfg.pop("google_docs_doc_id", None)
 
+    cfg = _configure_audio_mode(cfg)
     cfg = _configure_whisper(cfg)
     cfg = _configure_language(cfg)
 

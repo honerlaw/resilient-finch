@@ -37,7 +37,7 @@ class _ActiveSession:
     session: Session
     capturer: AudioCapturer
     mic_transcriber: Transcriber
-    speaker_transcriber: Transcriber
+    speaker_transcriber: Transcriber | None
 
 
 @dataclasses.dataclass
@@ -63,10 +63,11 @@ def _ensure_model() -> WhisperModel:
 
 
 @mcp.tool()
-def start_session(topic: str = "") -> str:
-    """Start capturing microphone and system audio and begin transcribing.
+def start_session(topic: str = "", mode: str = "") -> str:
+    """Start capturing audio and begin transcribing.
 
     Optionally provide a topic label such as 'daily standup' or '1:1 with Alex'.
+    mode: 'mic_only' (room capture, higher gain — default) or 'mic_and_speaker' (headphones + mic).
     """
     model = _ensure_model()
 
@@ -74,12 +75,19 @@ def start_session(topic: str = "") -> str:
         if _state.active is not None:
             return "A session is already running. Call stop_session first."
 
+        resolved_mode = mode if mode in ("mic_only", "mic_and_speaker") else config.AUDIO_MODE
+        mic_gain = config.MIC_ONLY_GAIN if resolved_mode == "mic_only" else 1.0
+
         session = Session(topic=topic, writers=_build_writers(topic))
         mic_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
         spk_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
-        capturer = AudioCapturer(mic_queue, spk_queue)
+        capturer = AudioCapturer(mic_queue, spk_queue, mode=resolved_mode, mic_gain=mic_gain)
         mic_t = Transcriber("MIC", mic_queue, session, model)
-        spk_t = Transcriber("SPEAKER", spk_queue, session, model)
+        spk_t = (
+            Transcriber("SPEAKER", spk_queue, session, model)
+            if resolved_mode == "mic_and_speaker"
+            else None
+        )
 
         try:
             capturer.start()
@@ -88,7 +96,8 @@ def start_session(topic: str = "") -> str:
             return f"Failed to start audio capture: {e}"
 
         mic_t.start()
-        spk_t.start()
+        if spk_t is not None:
+            spk_t.start()
 
         _state.active = _ActiveSession(
             session=session,
@@ -100,7 +109,7 @@ def start_session(topic: str = "") -> str:
         topic_suffix = f" (topic: {topic})" if topic else ""
         file_path = session.get_file_path()
         location = str(file_path) if file_path is not None else ", ".join(config.OUTPUTS)
-        return f"Session started{topic_suffix}. Saving to: {location}"
+        return f"Session started{topic_suffix} [{resolved_mode}]. Saving to: {location}"
 
 
 @mcp.tool()
@@ -117,7 +126,8 @@ def stop_session() -> str:
 
     active.capturer.stop()
     active.mic_transcriber.flush_and_stop(timeout=60.0)
-    active.speaker_transcriber.flush_and_stop(timeout=60.0)
+    if active.speaker_transcriber is not None:
+        active.speaker_transcriber.flush_and_stop(timeout=60.0)
     active.session.close()
 
     file_path = active.session.get_file_path()

@@ -59,8 +59,16 @@ def run() -> None:
         metavar="TEXT",
         help='What this session is about, e.g. "daily standup". Included in filename and header.',
     )
+    parser.add_argument(
+        "-m",
+        "--mode",
+        default=config.AUDIO_MODE,
+        choices=["mic_only", "mic_and_speaker"],
+        help="Audio capture mode (default: %(default)s). mic_only: mic-only with higher gain for room capture. mic_and_speaker: mic + system audio, for use with headphones.",
+    )
     args = parser.parse_args()
     topic: str = args.topic
+    mode: str = args.mode
 
     logging.basicConfig(
         level=logging.INFO,
@@ -70,6 +78,7 @@ def run() -> None:
 
     writers = _build_writers(topic)
     session = Session(topic=topic, writers=writers)
+    sys.stdout.write(f"Mode:         {mode}\n")
     if topic:
         sys.stdout.write(f"Topic:        {topic}\n")
     file_path = session.get_file_path()
@@ -89,9 +98,10 @@ def run() -> None:
     mic_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
     speaker_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=config.AUDIO_QUEUE_MAXSIZE)
 
-    capturer = AudioCapturer(mic_queue, speaker_queue)
+    mic_gain = config.MIC_ONLY_GAIN if mode == "mic_only" else 1.0
+    capturer = AudioCapturer(mic_queue, speaker_queue, mode=mode, mic_gain=mic_gain)
     mic_t = Transcriber("MIC", mic_queue, session, model)
-    spk_t = Transcriber("SPEAKER", speaker_queue, session, model)
+    spk_t = Transcriber("SPEAKER", speaker_queue, session, model) if mode == "mic_and_speaker" else None
 
     signal.signal(signal.SIGINT, _shutdown_handler)
     signal.signal(signal.SIGTERM, _shutdown_handler)
@@ -104,14 +114,16 @@ def run() -> None:
         return
 
     mic_t.start()
-    spk_t.start()
+    if spk_t is not None:
+        spk_t.start()
 
     sys.stdout.write("Recording... Press Ctrl+C to stop.\n\n")
     _shutdown_event.wait()
 
     capturer.stop()
     mic_t.flush_and_stop(timeout=60.0)
-    spk_t.flush_and_stop(timeout=60.0)
+    if spk_t is not None:
+        spk_t.flush_and_stop(timeout=60.0)
     session.close()
     saved_path = session.get_file_path()
     if saved_path is not None:

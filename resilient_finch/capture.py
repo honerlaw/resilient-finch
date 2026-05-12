@@ -419,9 +419,13 @@ class AudioCapturer:
         self,
         mic_queue: queue.Queue[AudioChunk],
         speaker_queue: queue.Queue[AudioChunk],
+        mode: str = "mic_only",
+        mic_gain: float = 1.0,
     ) -> None:
         self._mic_queue = mic_queue
         self._speaker_queue = speaker_queue
+        self._mode = mode
+        self._mic_gain = mic_gain
         self._mic_stream: sd.InputStream | None = None
         self._tap_id: int | None = None
         self._tap_agg_id: int | None = None
@@ -429,29 +433,30 @@ class AudioCapturer:
         self._tap_ioproc_fn: object = None  # must stay alive (ctypes GC guard)
 
     def start(self) -> None:
-        tap_id, tap_uid, tap_fmt = _create_process_tap()
-        self._tap_id = tap_id
+        if self._mode == "mic_and_speaker":
+            tap_id, tap_uid, tap_fmt = _create_process_tap()
+            self._tap_id = tap_id
 
-        # Wrap the tap in an aggregate device — the aggregate is a proper AudioDevice
-        # that supports IOProc, whereas the tap AudioObject does not.
-        agg_id = _create_tap_aggregate(tap_uid)
-        self._tap_agg_id = agg_id
+            # Wrap the tap in an aggregate device — the aggregate is a proper AudioDevice
+            # that supports IOProc, whereas the tap AudioObject does not.
+            agg_id = _create_tap_aggregate(tap_uid)
+            self._tap_agg_id = agg_id
 
-        self._tap_ioproc_fn = _make_tap_ioproc(self._speaker_queue, tap_fmt.mSampleRate)
-        proc_id = ctypes.c_void_p(0)
-        status = _CA.AudioDeviceCreateIOProcID(
-            agg_id,
-            self._tap_ioproc_fn,
-            None,
-            ctypes.byref(proc_id),
-        )
-        if status != 0:
-            raise RuntimeError(f"AudioDeviceCreateIOProcID failed: OSStatus {status:#010x}")
-        self._tap_proc_id = proc_id.value
+            self._tap_ioproc_fn = _make_tap_ioproc(self._speaker_queue, tap_fmt.mSampleRate)
+            proc_id = ctypes.c_void_p(0)
+            status = _CA.AudioDeviceCreateIOProcID(
+                agg_id,
+                self._tap_ioproc_fn,
+                None,
+                ctypes.byref(proc_id),
+            )
+            if status != 0:
+                raise RuntimeError(f"AudioDeviceCreateIOProcID failed: OSStatus {status:#010x}")
+            self._tap_proc_id = proc_id.value
 
-        status = _CA.AudioDeviceStart(agg_id, self._tap_proc_id)
-        if status != 0:
-            raise RuntimeError(f"AudioDeviceStart (tap aggregate) failed: OSStatus {status:#010x}")
+            status = _CA.AudioDeviceStart(agg_id, self._tap_proc_id)
+            if status != 0:
+                raise RuntimeError(f"AudioDeviceStart (tap aggregate) failed: OSStatus {status:#010x}")
 
         mic_idx = (
             self._find_device_index(config.MIC_DEVICE_NAME) if config.MIC_DEVICE_NAME else None
@@ -462,15 +467,10 @@ class AudioCapturer:
             samplerate=config.SAMPLE_RATE,
             blocksize=config.BLOCK_SIZE_FRAMES,
             dtype="float32",
-            callback=self._make_callback(self._mic_queue, "MIC"),
+            callback=self._make_callback(self._mic_queue, "MIC", gain=self._mic_gain),
         )
         self._mic_stream.start()
-        logger.info(
-            "Audio capture started (mic=%s, tap agg id=%d %.0f Hz)",
-            mic_idx,
-            agg_id,
-            tap_fmt.mSampleRate,
-        )
+        logger.info("Audio capture started (mode=%s, mic=%s)", self._mode, mic_idx)
 
     def stop(self) -> None:
         if self._mic_stream is not None:
@@ -511,7 +511,9 @@ class AudioCapturer:
         msg = f"Input device '{name}' not found.\nAvailable input devices:\n" + "\n".join(available)
         raise RuntimeError(msg)
 
-    def _make_callback(self, q: queue.Queue[AudioChunk], source: str) -> _CallbackFn:
+    def _make_callback(
+        self, q: queue.Queue[AudioChunk], source: str, gain: float = 1.0
+    ) -> _CallbackFn:
         def callback(
             indata: NDArray[np.float32],
             _frames: int,
@@ -521,6 +523,8 @@ class AudioCapturer:
             if status:
                 logger.warning("[%s] sounddevice status: %s", source, status)
             mono: NDArray[np.float32] = indata.mean(axis=1) if indata.shape[1] > 1 else indata[:, 0]
+            if gain != 1.0:
+                mono = np.clip(mono * gain, -1.0, 1.0).astype(np.float32)
             chunk = AudioChunk(data=mono.copy(), timestamp=datetime.now(tz=UTC), source=source)
             try:
                 q.put_nowait(chunk)

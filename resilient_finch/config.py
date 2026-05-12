@@ -9,6 +9,8 @@ CHANNELS: int = 1
 BLOCK_SIZE_FRAMES: int = 1_024
 MIC_DEVICE_NAME: str | None = None
 AUDIO_QUEUE_MAXSIZE: int = 500
+AUDIO_MODE: str = "mic_only"  # "mic_only" or "mic_and_speaker"
+MIC_ONLY_GAIN: float = 3.0
 
 # Buffering / segmentation
 SEGMENT_SECONDS: float = 20.0
@@ -67,5 +69,13 @@ if _user_config_path.exists():
             WHISPER_MODEL = str(_user_config["whisper_model"])
         if "whisper_language" in _user_config:
             WHISPER_LANGUAGE = str(_user_config["whisper_language"])
+        if "audio_mode" in _user_config:
+            _v = _user_config["audio_mode"]
+            if _v in ("mic_only", "mic_and_speaker"):
+                AUDIO_MODE = str(_v)
+        if "mic_only_gain" in _user_config:
+            _v = _user_config["mic_only_gain"]
+            if isinstance(_v, (int, float)):
+                MIC_ONLY_GAIN = float(_v)
     except (_json.JSONDecodeError, OSError):
         pass
